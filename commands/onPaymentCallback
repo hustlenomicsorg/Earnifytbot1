@@ -1,0 +1,71 @@
+/*CMD
+  command: onPaymentCallback
+  need_reply: false
+  folder: webhooks
+CMD*/
+
+//
+// This command is intended to be called by your payment provider IPN / webhook.
+// Use Libs.Webhooks.getUrlFor or manual webhook registration to get a secure URL and configure it with the provider.
+// The Webhooks lib will call this command with request data available in 'content' variable.
+// Validate payment, update order status, credit reseller/referrer, and deliver product link.
+//
+// SECURITY: Validate provider signature if available. Do not trust raw data without checking.
+//
+
+// Example: parse provider payload
+var body = {};
+try { body = JSON.parse(content || "{}"); } catch(e) { body = {}; }
+
+// Basic validation (replace with real signature check)
+if (!body.order_id && !body.provider_order_id) {
+  Bot.inspect("Invalid payment callback");
+  return;
+}
+
+// Find order in storage by order id (implementation depends on where you stored)
+var orderId = body.order_id || body.custom_order_id || (bb_options && bb_options.orderId ? bb_options.orderId : null);
+
+// Validate status
+var success = body.status === "paid" || body.paid === true || body.result === "success";
+
+if (!orderId) { Bot.inspect("No orderId in callback"); return; }
+
+// update order storage (List or property)
+try {
+  var orders = Bot.getProperty("orders_list") || [];
+  for (var i=0;i<orders.length;i++){
+    if (orders[i].id === orderId) {
+      orders[i].status = success ? "paid" : "failed";
+      orders[i].provider_response = body;
+      break;
+    }
+  }
+  Bot.setProperty("orders_list", orders, "json");
+} catch(e) {
+  Bot.inspect("Error updating order: " + e);
+}
+
+// If paid -> deliver product and credit referral
+if (success) {
+  // deliver: send a message with download / course access instructions
+  // In a production app you should generate per-user download links or mark user as having purchased.
+  Api.sendMessage({ chat_id: orders[i].user_id, text: "Payment confirmed. Thank you! Course access: https://t.me/" + bot.name + "?start=access_" + orderId });
+
+  // Credit referral reward if present
+  var ref = orders[i].ref;
+  if (ref && ref !== "none") {
+    try {
+      // Use ResourcesLib or setProp to increase referrer balance
+      if (Libs && Libs.ResourcesLib) {
+        var res = Libs.ResourcesLib.userRes("balance", ref); // pseudo
+        res.add( Math.floor(orders[i].product.price_inr * 0.1) ); // 10% commission
+      } else {
+        // fallback: simple prop
+        var key = "balance_" + ref;
+        var b = Bot.getProperty(key) || 0;
+        Bot.setProperty(key, b + Math.floor(orders[i].product.price_inr * 0.1), "number");
+      }
+    } catch(e) { Bot.inspect("Referral credit error: " + e); }
+  }
+}
