@@ -1,0 +1,9 @@
+/*CMD
+  command: _start
+  help: Start command
+  need_reply: false
+  auto_retry_time: 0
+  folder: default
+CMD*/
+
+Bot.sendMessage("Hello! Bot imported successfully. Use /index to open mini app.");
