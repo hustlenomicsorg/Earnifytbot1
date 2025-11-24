@@ -1,0 +1,15 @@
+/*CMD
+  command: index
+  help: Open storefront page
+  need_reply: false
+  auto_retry_time: 0
+  folder: webapp
+CMD*/
+
+WebApp.render({
+  template: "index.html",
+  options: {
+    botName: bot.name || "Test Bot",
+    message: "Welcome — Git import successful!"
+  }
+});
