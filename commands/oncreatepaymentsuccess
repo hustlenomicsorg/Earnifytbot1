@@ -1,0 +1,31 @@
+/*CMD
+  command: onCreatePaymentSuccess
+  need_reply: false
+CMD*/
+
+//
+// Called when payment provider returned link or details (via HTTP.post success).
+// HTTP content is saved to `content` variable per BB docs.
+//
+try {
+  var data = JSON.parse(content || "{}");
+} catch (e) {
+  Bot.sendMessage("Payment provider returned unexpected response.");
+  Bot.inspect(content);
+  return;
+}
+
+// Example expected data: { payment_url: "...", provider_order_id: "..." }
+if (!data.payment_url) {
+  Bot.sendMessage("Payment link not available. Please contact support.");
+  Bot.inspect(data);
+  return;
+}
+
+// Send link to the user (or render a page)
+Api.sendMessage({
+  chat_id: user.telegramid,
+  text: "Click to pay: " + data.payment_url
+});
+
+// Save provider_order_id against order in storage (omitted here — implement as needed)
