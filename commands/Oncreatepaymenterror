@@ -1,0 +1,6 @@
+/*CMD
+  command: onCreatePaymentError
+  need_reply: false
+CMD*/
+Bot.sendMessage("Failed to create payment link. Please try later.");
+Bot.inspect(http_status);
