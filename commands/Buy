@@ -1,0 +1,102 @@
+/*CMD
+  command: buy
+  help: Handle buy from WebApp or web params
+  need_reply: false
+  auto_retry_time: 0
+  folder: store
+CMD*/
+
+//
+// This command should be triggered when the bot receives web_app_data (from Telegram WebApp.sendData)
+// or when the user opens the web app with ?action=buy&productId=... parameters (options param).
+//
+// Responsibilities:
+// - Validate request & product id.
+// - Create an "order" in a List or a DB (Lists recommended for records).
+// - Create payment link (Razorpay / CoinPayments / Qiwi) via HTTP request from BJS.
+// - Store order with status "pending" and a unique order id.
+// - Return a payment link to the WebApp or send a message with payment link.
+// - Use Webhooks lib to receive provider IPN and call onPaymentCallback when completed.
+//
+// NOTE: This example uses a generic HTTP call to payment provider and Webhooks flow.
+// Replace PAYMENT_PROVIDER endpoints & secrets with your own provider credentials (store in bot properties).
+//
+
+// --- Product catalog (same as in index)
+var PRODUCTS = {
+  "c1": { id: "c1", title: "Course A", price_inr: 499 },
+  "c2": { id: "c2", title: "Course B", price_inr: 999 },
+  "c3": { id: "c3", title: "Course C", price_inr: 1499 }
+};
+
+function error(msg){
+  Bot.sendMessage(msg);
+  return;
+}
+
+// 1) Get payload: either from message.web_app_data or options
+var payload = null;
+try {
+  if (message && message.web_app_data) {
+    payload = JSON.parse(message.web_app_data.data || "{}");
+  } else {
+    // options passed via WebApp.getUrl available as 'options'
+    payload = options || {};
+  }
+} catch(e){
+  return error("Invalid request payload.");
+}
+
+// Validate product
+var pid = payload.productId || payload.product || "";
+if (!pid || !PRODUCTS[pid]) return error("Product not found.");
+
+// Create order id
+var orderId = "ORD" + Date.now() + String(Math.floor(Math.random()*900+100));
+
+// Store basic order in Lists (recommended for large data) or in props if small
+var order = {
+  id: orderId,
+  user_id: user.id || (payload.userId || "unknown"),
+  product: PRODUCTS[pid],
+  ref: payload.ref || "none",
+  status: "pending",
+  created_at: Date.now()
+};
+
+// Save to List for reliable history
+try {
+  // Lists provide search and storage for many records
+  // Use Lists.create or Lists.add appropriately (API may vary per BB version)
+  // We'll fallback to bot property if Lists not available
+  if (typeof List !== "undefined") {
+    // PSEUDO-CODE: adapt if List API differs in your BB version
+    List.add("orders", order);
+  } else {
+    // save as property array (ok for small volume)
+    var all = Bot.getProperty("orders_list") || [];
+    all.push(order);
+    Bot.setProperty("orders_list", all, "json");
+  }
+} catch (e) {
+  Bot.inspect("Save order error: " + e);
+}
+
+// 2) Create payment link with provider — example: using a generic provider API
+var amountINR = order.product.price_inr;
+
+// You must store provider credentials securely as bot properties or using BB Admin settings.
+// Example hypothetical api call to your payment provider (replace URL & body with real provider).
+// We'll call HTTP.post with background:true to avoid timeouts for slow APIs.
+HTTP.post({
+  url: Bot.getProperty("PAYMENT_CREATE_URL") || "https://api.example-pay.com/create",
+  body: { amount: amountINR, currency: "INR", order_id: orderId, note: order.product.title, callback_url: Libs && Libs.Webhooks ? Libs.Webhooks.getUrlFor({ command: "onPaymentCallback", bb_options: { orderId: orderId } }) : "" },
+  success: "/onCreatePaymentSuccess",
+  error: "/onCreatePaymentError",
+  background: true
+});
+
+// 3) Inform user: 'processing payment...'
+Bot.sendMessage("Processing your payment. You will receive a link shortly. If nothing arrives in 10 seconds, try again.");
+
+// (onCreatePaymentSuccess will be called next)
