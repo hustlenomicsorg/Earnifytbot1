@@ -1,0 +1,51 @@
+/*CMD
+  command: index
+  help: Show storefront home
+  need_reply: false
+  auto_retry_time: 0
+  folder: store
+CMD*/
+
+//
+// Renders main storefront page (3 courses + affiliate/resell UI).
+// Uses templates/index.html and passes options (bot link, course data, referral code).
+//
+
+// --- Configurable product catalog (INR prices)
+var PRODUCTS = [
+  { id: "c1", title: "Course A: Mastering X", price_inr: 499, description: "Beginner→Pro, 6 modules" },
+  { id: "c2", title: "Course B: Advanced Y", price_inr: 999, description: "Advanced strategies + templates" },
+  { id: "c3", title: "Course C: Reseller Pack", price_inr: 1499, description: "Resell rights + marketing kit" }
+];
+
+// get URL for static assets (templates)
+var CSS = WebApp.getUrl({ command: "styles.css" });
+var JS  = WebApp.getUrl({ command: "app.js" });
+
+// create referral code for this user (use RefferalLib if installed)
+var refCode = "none";
+try {
+  if (typeof Libs !== "undefined" && Libs.RefferalLib) {
+    // RefferalLib usually handles referral creation; if installed use it
+    refCode = Libs.RefferalLib.getRefByUser({ user_id: user.id }) || String(user.id);
+  } else {
+    refCode = "u" + String(user.id);
+  }
+} catch (e) {
+  Bot.inspect("ReferralLib unavailable: " + e);
+  refCode = "u" + String(user.id);
+}
+
+// Render template with options
+WebApp.render({
+  template: "index.html",
+  options: {
+    botName: bot.name || "Our Bot",
+    botLink: "https://t.me/" + bot.name,
+    cssUrl: CSS,
+    jsUrl: JS,
+    productsJSON: JSON.stringify(PRODUCTS),
+    refCode: refCode,
+    userId: user.id
+  }
+});
